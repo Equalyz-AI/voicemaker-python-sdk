@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ._base import BaseModule
+from ._streaming import AsrStreamConnection
 from .._types._asr import TranscriptionJob
 from .._types._common import PaginatedResponse
 from .._utils import poll as _poll
@@ -73,4 +74,41 @@ class ASRModule(BaseModule):
             is_done=lambda r: r.status in _TERMINAL,
             interval_seconds=interval_seconds,
             timeout_seconds=timeout_seconds,
+        )
+
+    def stream(
+        self,
+        *,
+        language: str,
+        sample_rate: int = 16000,
+        interim_results: bool = True,
+        access_token: "str | None" = None,
+    ) -> AsrStreamConnection:
+        """Open a real-time streaming transcription session (WebSocket).
+
+        ``language`` must be explicit (``yo``, ``ig``, ``ha``, ``pcm`` or
+        ``en`` — auto-detection is batch-only). Send PCM16LE mono audio at
+        ``sample_rate`` with ``send_audio()``; iterate the connection for
+        interim and final transcripts.
+
+        ``access_token`` — an ephemeral token minted by a backend holding the
+        real key (``auth.create_stream_token(type="asr")``); lets untrusted
+        clients stream without an ``api_key``.
+        """
+        if language == "auto":
+            raise ValueError(
+                "Streaming requires an explicit language (yo, ig, ha, pcm or en)."
+            )
+        url = self._http.ws_url(
+            "/dev/v1/transcribe/stream",
+            {
+                "language": language,
+                "sample_rate": sample_rate,
+                "interim_results": "true" if interim_results else "false",
+            },
+        )
+        return AsrStreamConnection(
+            url=url,
+            api_key=self._http.api_key,
+            access_token=access_token,
         )

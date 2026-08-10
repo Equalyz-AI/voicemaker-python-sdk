@@ -305,6 +305,54 @@ Raises `TimeoutError` if `timeout_seconds` is exceeded before the job completes.
 | `created_at` | `str` (ISO 8601) |
 | `completed_at` | `str \| None` (ISO 8601) |
 
+#### `client.asr.stream(*, language, sample_rate=16000, interim_results=True)` — real-time streaming (WebSocket)
+
+Transcribe live audio with interim results as you speak. Uses the bundled
+`websockets` dependency; no extra setup.
+
+```python
+import threading
+from myvoicemaker import StreamTranscript, StreamSessionEnd
+
+with client.asr.stream(language="yo", sample_rate=16000) as conn:
+    def send_audio():
+        for chunk in pcm_chunks:      # PCM16LE mono bytes, 50-250ms per chunk
+            conn.send_audio(chunk)
+        conn.close()                  # flushes the tail, then ends the session
+
+    threading.Thread(target=send_audio, daemon=True).start()
+
+    for event in conn:
+        if isinstance(event, StreamTranscript):
+            print("FINAL" if event.is_final else "interim", event.text)
+        elif isinstance(event, StreamSessionEnd):
+            print(f"used {event.credits_used} credits over {event.duration_seconds}s")
+```
+
+**Parameters**
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `language` | `Literal['yo', 'ig', 'ha', 'pcm', 'en']` | Yes | Explicit language — `auto` is batch-only. |
+| `sample_rate` | `int` | No | Sample rate of your PCM16LE mono audio. Default `16000` (8000-48000). |
+| `interim_results` | `bool` | No | Emit revisable interim transcripts. Default `True`. |
+
+**Connection API**: `send_audio(bytes)`, `finalize()` (flush pending words into a
+final without closing), `close()` (graceful end, returns `StreamSessionEnd`),
+`recv(timeout=None)` (next event or `None`), iteration (`for event in conn`),
+callbacks (`conn.on("transcript", fn)` — fired on a background thread),
+`conn.session` / `conn.result` properties.
+
+**Events**: `StreamSessionBegin`, `StreamTranscript` (`text`, `is_final`, `start`,
+`end`, `confidence`), `StreamSessionEnd` (`duration_seconds`, `credits_used`,
+`reason`), `StreamError` (`code`, `message`).
+
+**Billing**: purchased credits only, at the transcription per-second rate; reserved
+in 60-second blocks while streaming and settled to the exact second at close. Idle
+connections (no audio or keep-alive for 30s) are closed; stream duration is capped
+per plan (up to 60 minutes) — reconnect to continue. The finished session is also
+retrievable afterwards via `client.asr.get_result(job_id)`.
+
 ---
 
 ### Lip-Sync Animation
@@ -365,7 +413,7 @@ Process text in Nigerian languages — explain, summarise, translate, or simplif
 
 > **Note:** This module targets a planned endpoint. Check the [changelog](https://myvoicemaker.ai/docs/changelog) for availability.
 
-#### `client.explain.process(text, language, action, *, target_language=None, max_tokens=None)`
+#### `client.explain.process(text, language, action, *, target_language=None, max_words=None)`
 
 ```python
 result = client.explain.process(
@@ -373,7 +421,7 @@ result = client.explain.process(
     language="yo",
     action="translate",
     target_language="en",
-    max_tokens=500,
+    max_words=250,
 )
 
 print(result.result)        # translated text
@@ -389,7 +437,7 @@ print(result.credits_used)  # e.g. 145
 | `language` | `str` | ✓ | Source language code |
 | `action` | `str` | ✓ | `explain` \| `summarize` \| `translate` \| `simplify` |
 | `target_language` | `str` | | Required when `action` is `translate` |
-| `max_tokens` | `int` | | Response length limit: 1–2000 (default `500`) |
+| `max_words` | `int` | | Soft length target in words: 1–1000 (default `250`). Not a hard cap — sentences always complete. |
 
 ---
 

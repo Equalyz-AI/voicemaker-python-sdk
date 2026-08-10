@@ -1,4 +1,7 @@
 from ._client import VoiceMaker
+from ._modules._streaming import AsrStreamConnection
+from ._modules._tts_streaming import TtsStreamConnection
+from ._utils import chunk_text
 
 from ._types import (
     SupportedLanguage,
@@ -9,9 +12,20 @@ from ._types import (
     UsageModule,
     PaginatedResponse,
     TranscriptionJob,
+    StreamSessionBegin,
+    StreamTranscript,
+    StreamSessionEnd,
+    StreamError,
     Voice,
     VoiceListResponse,
     TtsGenerateResponse,
+    TtsSessionBegin,
+    TtsChunkStart,
+    TtsAudioChunk,
+    TtsChunkEnd,
+    TtsFinalized,
+    TtsSessionEnd,
+    TtsStreamError,
     AnimateJobResponse,
     AnimateResultResponse,
     ExplainAction,
@@ -19,6 +33,8 @@ from ._types import (
     UsageBalanceResponse,
     UsageBreakdownEntry,
     UsageBreakdownResponse,
+    StreamTokenResponse,
+    StreamTokenType,
 )
 
 from ._errors import (
@@ -39,6 +55,10 @@ from ._errors import (
 __all__ = [
     # Client
     "VoiceMaker",
+    "AsrStreamConnection",
+    "TtsStreamConnection",
+    # Utils
+    "chunk_text",
     # Types
     "SupportedLanguage",
     "JobStatus",
@@ -48,9 +68,20 @@ __all__ = [
     "UsageModule",
     "PaginatedResponse",
     "TranscriptionJob",
+    "StreamSessionBegin",
+    "StreamTranscript",
+    "StreamSessionEnd",
+    "StreamError",
     "Voice",
     "VoiceListResponse",
     "TtsGenerateResponse",
+    "TtsSessionBegin",
+    "TtsChunkStart",
+    "TtsAudioChunk",
+    "TtsChunkEnd",
+    "TtsFinalized",
+    "TtsSessionEnd",
+    "TtsStreamError",
     "AnimateJobResponse",
     "AnimateResultResponse",
     "ExplainAction",
@@ -58,6 +89,8 @@ __all__ = [
     "UsageBalanceResponse",
     "UsageBreakdownEntry",
     "UsageBreakdownResponse",
+    "StreamTokenResponse",
+    "StreamTokenType",
     # Errors
     "VoiceMakerError",
     "VoiceMakerAPIError",

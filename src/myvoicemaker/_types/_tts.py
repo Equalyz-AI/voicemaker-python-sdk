@@ -12,6 +12,9 @@ class Voice:
     language: str
     style: str
     sample_url: str
+    #: ``"preset"`` for catalog voices, ``"custom"`` for your own cloned
+    #: voices (created with Clone For Me in the web app).
+    type: str = "preset"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Voice:
@@ -22,6 +25,7 @@ class Voice:
             language=data["language"],
             style=data["style"],
             sample_url=data["sample_url"],
+            type=data.get("type", "preset"),
         )
 
 
@@ -45,6 +49,8 @@ class TtsGenerateResponse:
     language: str
     voice_id: str
     created_at: str
+    #: Delivered audio format: ``"wav"`` (default), ``"mp3"`` or ``"ogg"``.
+    output_format: str = "wav"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TtsGenerateResponse:
@@ -58,4 +64,5 @@ class TtsGenerateResponse:
             language=data["language"],
             voice_id=data["voice_id"],
             created_at=data["created_at"],
+            output_format=data.get("output_format", "wav"),
         )

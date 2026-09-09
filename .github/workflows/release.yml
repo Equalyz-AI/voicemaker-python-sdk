@@ -1,0 +1,55 @@
+name: Release
+
+# Publishes to PyPI when a version tag (v1.2.3) is pushed.
+# Auth is a PyPI Trusted Publisher (OIDC) — no PYPI_API_TOKEN secret is used.
+# The `release` environment gates the publish step behind required reviewers.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify tag matches pyproject.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Compare versions
+        run: |
+          PKG="$(uv version --short)"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag v$TAG does not match pyproject.toml version $PKG"
+            exit 1
+          fi
+          echo "Releasing myvoicemaker $PKG"
+
+  ci:
+    name: Tests + build
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish to PyPI
+    needs: [verify, ci]
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/project/myvoicemaker/
+    permissions:
+      contents: read
+      id-token: write # required for PyPI Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true

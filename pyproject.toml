@@ -17,7 +17,7 @@ keywords = [
 ]
 
 [project.urls]
-Repository = "https://github.com/equalyzai/voicemaker-python-sdk"
+Repository = "https://github.com/Equalyz-AI/voicemaker-python-sdk"
 
 [dependency-groups]
 dev = ["pytest>=8"]

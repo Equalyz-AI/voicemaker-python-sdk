@@ -1,6 +1,7 @@
 from ._common import (
     AccountTier,
     JobStatus,
+    KnownLanguage,
     OutputAudioFormat,
     OutputVideoFormat,
     PaginatedResponse,
@@ -15,7 +16,15 @@ from ._asr_stream import (
     StreamSessionEnd,
     StreamTranscript,
 )
-from ._tts import TtsGenerateResponse, Voice, VoiceListResponse
+from ._tts import (
+    TtsGenerateResponse,
+    TtsJobResponse,
+    TtsResultResponse,
+    TtsLanguage,
+    TtsLanguageListResponse,
+    Voice,
+    VoiceListResponse,
+)
 from ._tts_stream import (
     TtsAudioChunk,
     TtsChunkEnd,
@@ -30,6 +39,7 @@ from ._explain import ExplainAction, ExplainResponse
 from ._usage import UsageBalanceResponse, UsageBreakdownEntry, UsageBreakdownResponse
 
 __all__ = [
+    "KnownLanguage",
     "SupportedLanguage",
     "JobStatus",
     "OutputAudioFormat",
@@ -45,6 +55,10 @@ __all__ = [
     "Voice",
     "VoiceListResponse",
     "TtsGenerateResponse",
+    "TtsJobResponse",
+    "TtsResultResponse",
+    "TtsLanguage",
+    "TtsLanguageListResponse",
     "TtsSessionBegin",
     "TtsChunkStart",
     "TtsAudioChunk",

@@ -22,5 +22,5 @@ class AuthModule(BaseModule):
         body: dict[str, object] = {"type": type}
         if expires_in is not None:
             body["expires_in"] = expires_in
-        resp = self._http.post("/dev/v1/auth/stream-token", body)
+        resp = self._http.post("/dev/v1/auth/stream-token", body, method="auth.create_stream_token")
         return StreamTokenResponse.from_dict(resp.data)

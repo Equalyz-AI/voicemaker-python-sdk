@@ -106,14 +106,21 @@ with VoiceMaker(api_key="vmk_live_...") as client:
 
 ## Supported Languages
 
-| Language | Code | Auto-detect (ASR) |
-| :--- | :--- | :---: |
-| Yoruba | `yo` | ✓ |
-| Igbo | `ig` | ✓ |
-| Hausa | `ha` | ✓ |
-| Nigerian Pidgin | `pcm` | ✓ |
-| English | `en` | ✓ |
-| Auto-detect | `auto` | — |
+Discover the current set with `client.tts.list_languages()` instead
+of hardcoding codes:
+
+```python
+response = client.tts.list_languages()
+
+print(response.default_language)  # e.g. "auto"
+for language in response.languages:
+    print(f"{language.code} — {language.label}")
+```
+
+Codes known at this SDK release: `yo` (Yoruba), `ig` (Igbo), `ha` (Hausa),
+`pcm` (Nigerian Pidgin), `en` (English) and `auto` (let the model detect the
+language). Omitting `language` uses the platform's default
+(`default_language` above).
 
 ---
 
@@ -122,6 +129,19 @@ with VoiceMaker(api_key="vmk_live_...") as client:
 ### Text-to-Speech (TTS)
 
 Convert text into natural-sounding speech. Requests are **synchronous** — the audio URL is returned immediately.
+
+#### `client.tts.list_languages()`
+
+Retrieve the languages currently enabled for synthesis.
+
+**Returns** `TtsLanguageListResponse`
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `default_language` | `str` | Code requests without a `language` resolve to |
+| `languages` | `list[TtsLanguage]` | `code`, `label`, `supports_voice_clone`, `supports_tone`, `supports_speed`, `streaming_supported` |
+
+---
 
 #### `client.tts.list_voices(*, language=None)`
 
@@ -139,7 +159,7 @@ for voice in response.voices:
 
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `language` | `str` (optional) | Filter by language code: `yo`, `ig`, `ha`, `pcm`, `en` |
+| `language` | `str` (optional) | Filter by language code (see `list_languages()`) |
 
 **Returns** `VoiceListResponse`
 
@@ -147,16 +167,18 @@ for voice in response.voices:
 | :--- | :--- |
 | `voices` | `list[Voice]` |
 
-Each `Voice` has: `id`, `name`, `gender`, `language`, `style`, `sample_url`.
+Each `Voice` has: `id`, `name`, `gender`, `language`, `style`, `sample_url`,
+and `type` (`"preset"` for catalog voices, `"custom"` for your own cloned
+voices).
 
 ---
 
-#### `client.tts.generate(text, voice_id, language, *, speed=None, output_format=None)`
+#### `client.tts.generate(text, voice_id, language=None, *, speed=None, output_format=None)`
 
 ```python
 result = client.tts.generate(
     text="Nne, ka anyị bido oge a.",
-    voice_id="sunday-okafor-male-conversational",
+    voice_id="amaka",
     language="ig",
     speed=0.9,
     output_format="mp3",
@@ -173,7 +195,7 @@ print(result.credits_used)     # e.g. 28
 | :--- | :--- | :---: | :--- |
 | `text` | `str` | ✓ | Text to synthesise (max 5,000 characters) |
 | `voice_id` | `str` | ✓ | Voice identifier from `list_voices()` |
-| `language` | `str` | ✓ | Language code |
+| `language` | `str` | | Language code from `list_languages()` (default: the platform's default language) |
 | `speed` | `float` | | Playback speed: `0.5`–`2.0` (default `1.0`) |
 | `output_format` | `str` | | `mp3` \| `wav` \| `ogg` (default `mp3`) |
 
@@ -189,6 +211,56 @@ print(result.credits_used)     # e.g. 28
 | `language` | `str` |
 | `voice_id` | `str` |
 | `created_at` | `str` (ISO 8601) |
+
+---
+
+#### `client.tts.generate(..., mode="async")`, `client.tts.get_result(id)`, `client.tts.poll(id, *, interval_seconds=2.0, timeout_seconds=120.0)` — async TTS
+
+Sync `generate()` holds the HTTP connection while the engine synthesises, so it
+can raise `ServiceWarmingError` (`503 tts_warming`, engine cold start) or
+`ConcurrencyLimitError` (`429 concurrency_limit_reached`, your plan's processing
+cap is in use). Async mode never hits either: the job is queued and returned as
+a `TtsJobResponse`, then fetched with `get_result()` or awaited with `poll()`.
+
+```python
+job = client.tts.generate(
+    "Sannu da zuwa.",
+    voice_id="amaka",
+    language="ha",
+    mode="async",                  # → TtsJobResponse(id, status="queued", credits_reserved, ...)
+)
+
+result = client.tts.poll(job.id, timeout_seconds=180)
+if result.status == "completed":
+    print(result.audio_url)        # TtsResultResponse
+else:
+    print(result.error)            # status == "failed"
+```
+
+`poll()` raises `PollTimeoutError` if the job is still running when
+`timeout_seconds` elapses — the job itself continues; call `get_result(id)` later.
+
+#### `client.tts.stream(*, voice_id, language=None, speed=1.0, quality="standard", access_token=None)` — real-time streaming synthesis
+
+Open a WebSocket session (`wss /dev/v1/tts/stream`): audio starts arriving
+while later text is still being sent. See `examples/tts_stream_to_file.py`
+for a full flow.
+
+```python
+connection = client.tts.stream(voice_id="amaka")
+```
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `voice_id` | `str` | ✓ | Voice identifier from `list_voices()` |
+| `language` | `str` | | Language code from `list_languages()` — only languages with `streaming_supported` are accepted (default: the platform's default language) |
+| `speed` | `float` | | Playback speed: `0.5`–`2.0` (default `1.0`) |
+| `quality` | `str` | | `"standard"` (default, lowest latency) or `"high"` |
+| `access_token` | `str` | | Single-use `vmst_*` stream token minted by your backend |
+
+Output is mono PCM16LE @ 24 kHz.
 
 ---
 
@@ -411,8 +483,6 @@ if result.status == "completed":
 
 Process text in Nigerian languages — explain, summarise, translate, or simplify content using AI.
 
-> **Note:** This module targets a planned endpoint. Check the [changelog](https://myvoicemaker.ai/docs/changelog) for availability.
-
 #### `client.explain.process(text, language, action, *, target_language=None, max_words=None)`
 
 ```python
@@ -494,60 +564,145 @@ print(f"Total: {report.total_credits_used} credits")
 
 ## Error Handling
 
-Every API error is raised as a typed exception that subclasses `VoiceMakerAPIError`.
+Every failure is raised as a typed exception that subclasses `VoiceMakerError`.
+The message names the **SDK method** that failed, explains what went wrong in
+SDK terms, and ends with the machine-readable code and the request id to quote
+to support:
+
+```
+tts.generate(): Unknown voice — voice_id 'foo' does not match an enabled voice
+preset or one of your custom voices. Use tts.list_voices() for the list of
+available voices. [unknown_voice_id · request 8f1c2d3e]
+```
+
+Catch the class for coarse handling and check `e.code` for exact cases:
 
 ```python
+import time
 from myvoicemaker import (
     VoiceMakerError,
+    VoiceMakerAPIError,
     AuthenticationError,
     InsufficientCreditsError,
     RateLimitError,
+    ServiceWarmingError,
+    UnknownVoiceError,
     ValidationError,
-    NotFoundError,
-    TimeoutError,
+    PollTimeoutError,
 )
 
 try:
-    result = client.tts.generate(...)
-except AuthenticationError:
-    print("Invalid or expired API key")
-except InsufficientCreditsError:
-    print("Not enough credits. Top up at myvoicemaker.ai/billing")
+    result = client.tts.generate(text, voice_id="amaka")
+except UnknownVoiceError as e:
+    voices = client.tts.list_voices().voices        # e.hint says the same
+except ServiceWarmingError as e:
+    time.sleep(e.retry_after or 60)                  # or generate(..., mode="async")
 except RateLimitError as e:
-    wait = e.retry_after or 60
-    print(f"Rate limited. Retry in {wait}s")
+    time.sleep(e.retry_after or 60)
+except InsufficientCreditsError as e:
+    notify_billing(e.request_id)
 except ValidationError as e:
-    print("Invalid parameters:", e.issues)
-except TimeoutError as e:
-    print(f"Job {e.job_id} timed out after {e.timeout_seconds}s")
+    print(e.issues)                                  # [{"field", "code", "message"}]
+except AuthenticationError:
+    rotate_key()
+except VoiceMakerAPIError as e:
+    if e.retryable:
+        schedule_retry()
+    else:
+        report(e.code, e.request_id)
+except PollTimeoutError as e:
+    pass                                             # job still running — get_result(e.job_id) later
 except VoiceMakerError as e:
-    print(f"API error {e.status}: {e.detail}")
+    print(e.code, e)                                 # network_error, request_timeout, ...
 ```
 
 ### Exception classes
 
-| Class | HTTP Status | Description |
-| :--- | :--- | :--- |
-| `AuthenticationError` | 401 | Missing or invalid API key |
-| `InsufficientCreditsError` | 402 | Insufficient purchased credits |
-| `PermissionError` | 403 | Key lacks required scope or plan |
-| `NotFoundError` | 404 | Resource not found |
-| `FileSizeLimitError` | 413 | Audio file exceeds plan size limit |
-| `UnsupportedMediaTypeError` | 415 | Unsupported file format |
-| `ValidationError` | 422 | Invalid request parameters (check `.issues`) |
-| `RateLimitError` | 429 | Rate limit or concurrency limit exceeded |
-| `ServerError` | 500/503 | Internal server error |
-| `TimeoutError` | — | `poll()` timed out waiting for job completion |
+Classes by HTTP status, refined by error code where developers need to branch:
 
-All HTTP exception classes expose:
+| Class | Status | Codes | Meaning |
+| :--- | :--- | :--- | :--- |
+| `AuthenticationError` | 401 | `missing_api_key`, `invalid_api_key`, `api_key_expired` | The key is missing, wrong, or expired |
+| ↳ `StreamTokenError` | 401/403 | `invalid_stream_token`, `stream_token_kind_mismatch` | Ephemeral stream token rejected — mint a fresh one with `auth.create_stream_token()` |
+| `ForbiddenError` (alias `PermissionError`, deprecated) | 403 | `api_key_revoked`, `project_disabled`, `api_access_not_enabled`, `insufficient_scope` | The key exists but may not make this call |
+| `InsufficientCreditsError` | 402 | `insufficient_credits` | Not enough purchased credits |
+| `NotFoundError` | 404 | `not_found`, `endpoint_not_found` | Unknown job id, or a wrong `base_url` |
+| `FileSizeLimitError` | 413 | `file_size_limit_exceeded`, `file_too_large` | Audio exceeds the plan / endpoint limit |
+| `UnsupportedMediaTypeError` | 415 | `unsupported_media`, `missing_audio_stream`, `unsupported_content_type`, … | Media format or content type not accepted |
+| `ValidationError` | 400/422 | `invalid_payload`, `invalid_query`, `voice_id_required`, `file_url_unreachable`, … | Bad request values — check `e.issues` |
+| ↳ `UnsupportedLanguageError` | 400 | `unsupported_language`, `streaming_unsupported_language` | Language not enabled / not streamable — see `tts.list_languages()` |
+| ↳ `UnknownVoiceError` | 422 | `unknown_voice_id` | Voice id matches nothing — see `tts.list_voices()` |
+| ↳ `VoiceNotReadyError` | 422 | `voice_not_ready` | Custom voice still processing or failed |
+| `RateLimitError` | 429 | `rate_limited` | Per-minute / daily request limit — wait `e.retry_after` |
+| ↳ `ConcurrencyLimitError` | 429 | `concurrency_limit_reached` | Plan's processing cap in use — retry or use `mode="async"` |
+| ↳ `QueueLimitError` | 429 | `queue_limit_reached` | Too many jobs queued |
+| ↳ `StreamConcurrencyError` | 429 | `stream_concurrency_limit` | Concurrent-stream cap in use |
+| `ServiceUnavailableError` | 503 | `stream_capacity`, `streaming_unavailable`, `token_service_unavailable`, `file_storage_unavailable`, … | Temporarily unavailable — retry later |
+| ↳ `ServiceWarmingError` | 503 | `tts_warming` | Speech engine cold-starting — retry in `e.retry_after`s or use `mode="async"` |
+| `ServerError` | 5xx | `synthesis_failed`, `explain_failed`, `internal_error`, … | Server failed while processing — usually retryable |
+| `VoiceMakerAPIError` | any | any | Base class of everything above |
+
+Client-side errors (no HTTP exchange happened) also subclass `VoiceMakerError`:
+
+| Class | Code | When |
+| :--- | :--- | :--- |
+| `ConfigurationError` | `api_key_required`, `credential_required`, `websocket_unavailable` | Missing key / stream credential / `websockets` package |
+| `InvalidArgumentError` | `invalid_argument` | An argument was rejected before any request (`e.argument`) |
+| `StreamClosedError` | `stream_not_open` | `send_audio()`/`send_text()` on a closed stream |
+| `NetworkError` | `network_error` | DNS, refused connection, TLS, proxy (`e.__cause__` is the httpx error) |
+| `RequestTimeoutError` | `request_timeout` | No response within `timeout` |
+| `PollTimeoutError` (alias `TimeoutError`, deprecated) | `poll_timeout` | `poll()` gave up; the job keeps running (`e.job_id`) |
+
+> `PermissionError` and `TimeoutError` are kept as deprecated aliases for 0.1.x
+> compatibility. Prefer `ForbiddenError` / `PollTimeoutError`: importing the
+> aliases shadows Python's builtins of the same name.
+
+### Exception attributes
 
 ```python
-e.status      # HTTP status code (int)
-e.error       # Short error title from the API
-e.detail      # Human-readable explanation
-e.request_id  # Request ID for support (from X-Request-Id header)
-e.issues      # List of validation issue dicts (ValidationError only)
+e.code         # stable machine-readable code, e.g. "unknown_voice_id" (or "http_502")
+e.method       # SDK method that failed, e.g. "tts.generate"
+str(e)         # "tts.generate(): Unknown voice — … [unknown_voice_id · request 8f1c2d3e]"
+# API errors (VoiceMakerAPIError and subclasses) additionally expose:
+e.status       # HTTP status code
+e.error        # Short title from the API
+e.detail       # Explanation, with endpoint references rewritten to SDK methods
+e.hint         # What to do about it (from the catalog)
+e.description  # What the code means (from the catalog)
+e.retryable    # Whether repeating the same call later can succeed
+e.retry_after  # Seconds to wait, when the API sent Retry-After
+e.request_id   # Request id for support (body or X-Request-Id header)
+e.issues       # Validation issues [{"field", "code", "message"}] (400/422 only)
+e.error_code   # Raw errorCode from the response body (None if the API sent none)
 ```
+
+### Error-code catalog
+
+`ERROR_CODES`, `CLIENT_ERROR_CODES` and `STREAM_ERROR_CODES` are exported so you
+can look codes up (or build your own messages):
+
+```python
+from myvoicemaker import ERROR_CODES, describe_error_code, describe_stream_close
+
+ERROR_CODES["tts_warming"].retryable      # True
+describe_error_code(e.code).hint          # "Retry in about e.retry_after seconds, or …"
+describe_stream_close(4002)               # "Purchased credits were exhausted."
+```
+
+The full list with meanings lives on the [Error Codes](https://docs.myvoicemaker.ai/error-codes)
+page of the API docs.
+
+### Streaming errors
+
+A refused connection (`asr.stream()` / `tts.stream()`) raises the **same typed
+exception a REST call would** — the server's JSON error body (with its
+`errorCode`) is read from the rejected handshake, so a missing credit reserve
+is an `InsufficientCreditsError`, a used-up token a `StreamTokenError`, and so
+on. Errors **during** a session arrive as `StreamError` / `TtsStreamError`
+events (`invalid_message`, `text_too_large`, `session_char_limit`,
+`insufficient_credits`, `idle_timeout`, `upstream_unavailable`,
+`internal_error`); a transport failure that ends the reader thread is kept on
+`conn.error`.
 
 ---
 
@@ -638,4 +793,4 @@ When a limit is exceeded the SDK raises `RateLimitError`. The `Retry-After` head
 
 ## License
 
-MIT © [Collins Edim](https://github.com/equalyzai)
+MIT © [EqualyzAI](https://github.com/equalyzai)

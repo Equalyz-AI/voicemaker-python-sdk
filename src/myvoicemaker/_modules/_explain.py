@@ -24,5 +24,5 @@ class ExplainModule(BaseModule):
         if max_words is not None:
             body["max_words"] = max_words
 
-        resp = self._http.post("/dev/v1/explain", body)
+        resp = self._http.post("/dev/v1/explain", body, method="explain.process")
         return ExplainResponse.from_dict(resp.data)

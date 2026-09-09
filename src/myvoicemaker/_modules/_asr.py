@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ._base import BaseModule
 from ._streaming import AsrStreamConnection
+from .._errors import InvalidArgumentError
 from .._types._asr import TranscriptionJob
 from .._types._common import PaginatedResponse
 from .._utils import poll as _poll
@@ -20,7 +21,7 @@ class ASRModule(BaseModule):
         body: dict[str, object] = {"audio": audio, "language": language}
         if webhook_url is not None:
             body["webhookUrl"] = webhook_url
-        resp = self._http.post("/dev/v1/transcribe", body)
+        resp = self._http.post("/dev/v1/transcribe", body, method="asr.transcribe")
         return TranscriptionJob.from_dict(resp.data)
 
     def transcribe_file(
@@ -34,11 +35,13 @@ class ASRModule(BaseModule):
             "language": language,
             "webhook_url": webhook_url,
         }
-        resp = self._http.post_multipart("/dev/v1/transcribe", file_path, fields)
+        resp = self._http.post_multipart(
+            "/dev/v1/transcribe", file_path, fields, method="asr.transcribe_file"
+        )
         return TranscriptionJob.from_dict(resp.data)
 
     def get_result(self, job_id: str) -> TranscriptionJob:
-        resp = self._http.get(f"/dev/v1/transcribe/{job_id}")
+        resp = self._http.get(f"/dev/v1/transcribe/{job_id}", None, method="asr.get_result")
         return TranscriptionJob.from_dict(resp.data)
 
     def list(
@@ -53,7 +56,7 @@ class ASRModule(BaseModule):
             params["cursor"] = cursor
         if status is not None:
             params["status"] = status
-        resp = self._http.get("/dev/v1/transcriptions", params)
+        resp = self._http.get("/dev/v1/transcriptions", params, method="asr.list")
         data = resp.data
         return PaginatedResponse(
             request_id=data.get("requestId", ""),
@@ -74,6 +77,7 @@ class ASRModule(BaseModule):
             is_done=lambda r: r.status in _TERMINAL,
             interval_seconds=interval_seconds,
             timeout_seconds=timeout_seconds,
+            method="asr.poll",
         )
 
     def stream(
@@ -95,9 +99,13 @@ class ASRModule(BaseModule):
         real key (``auth.create_stream_token(type="asr")``); lets untrusted
         clients stream without an ``api_key``.
         """
-        if language == "auto":
-            raise ValueError(
-                "Streaming requires an explicit language (yo, ig, ha, pcm or en)."
+        if not language or language == "auto":
+            raise InvalidArgumentError(
+                "language",
+                "streaming needs an explicit language code (auto-detection is "
+                "batch-only); pick one from tts.list_languages() such as "
+                '"en", "yo", "ha", "ig" or "pcm".',
+                "asr.stream",
             )
         url = self._http.ws_url(
             "/dev/v1/transcribe/stream",
@@ -111,4 +119,5 @@ class ASRModule(BaseModule):
             url=url,
             api_key=self._http.api_key,
             access_token=access_token,
+            method="asr.stream",
         )

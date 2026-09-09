@@ -64,3 +64,59 @@ class TestTtsGenerateResponse:
     def test_parses_output_format(self) -> None:
         resp = TtsGenerateResponse.from_dict({**self.BASE, "output_format": "mp3"})
         assert resp.output_format == "mp3"
+
+
+class TestTtsLanguages:
+    def test_parses_language_list_response(self) -> None:
+        from myvoicemaker._types._tts import TtsLanguageListResponse
+
+        resp = TtsLanguageListResponse.from_dict(
+            {
+                "default_language": "auto",
+                "languages": [
+                    {
+                        "code": "ha",
+                        "label": "Hausa",
+                        "supports_voice_clone": True,
+                        "supports_tone": False,
+                        "supports_speed": True,
+                        "streaming_supported": True,
+                    },
+                    # Missing capability keys must default to False.
+                    {"code": "yo", "label": "Yoruba"},
+                ],
+            }
+        )
+        assert resp.default_language == "auto"
+        assert resp.languages[0].code == "ha"
+        assert resp.languages[0].streaming_supported is True
+        assert resp.languages[1].supports_voice_clone is False
+
+
+class TestErrorMapping:
+    def test_unsupported_language_maps_to_typed_error(self) -> None:
+        from myvoicemaker._errors import UnsupportedLanguageError, create_api_error
+
+        err = create_api_error(
+            400,
+            {
+                "error": "Unsupported language",
+                "detail": "The requested language is not available.",
+                "errorCode": "unsupported_language",
+            },
+        )
+        assert isinstance(err, UnsupportedLanguageError)
+        assert err.error_code == "unsupported_language"
+
+    def test_plain_400_maps_to_validation_error(self) -> None:
+        from myvoicemaker._errors import (
+            UnsupportedLanguageError,
+            ValidationError,
+            create_api_error,
+        )
+
+        err = create_api_error(
+            400, {"error": "Invalid request", "detail": "Bad payload."}
+        )
+        assert isinstance(err, ValidationError)
+        assert not isinstance(err, UnsupportedLanguageError)

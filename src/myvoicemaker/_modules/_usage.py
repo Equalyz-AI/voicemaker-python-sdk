@@ -6,7 +6,7 @@ from .._types._usage import UsageBalanceResponse, UsageBreakdownResponse
 
 class UsageModule(BaseModule):
     def get_balance(self) -> UsageBalanceResponse:
-        resp = self._http.get("/dev/v1/usage")
+        resp = self._http.get("/dev/v1/usage", None, method="usage.get_balance")
         return UsageBalanceResponse.from_dict(resp.data)
 
     def get_breakdown(
@@ -23,5 +23,5 @@ class UsageModule(BaseModule):
         if module is not None:
             params["module"] = module
 
-        resp = self._http.get("/dev/v1/usage/breakdown", params)
+        resp = self._http.get("/dev/v1/usage/breakdown", params, method="usage.get_breakdown")
         return UsageBreakdownResponse.from_dict(resp.data)

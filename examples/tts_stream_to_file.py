@@ -27,7 +27,9 @@ TEXT = (
 
 def main() -> None:
     client = VoiceMaker(api_key=API_KEY)
-    with client.tts.stream(voice_id=VOICE_ID, language="auto") as conn:
+    # language omitted → the platform's default; pass a code from
+    # client.tts.list_languages() to pin one (e.g. language="ha").
+    with client.tts.stream(voice_id=VOICE_ID) as conn:
         conn.on(
             "chunk_end",
             lambda e: isinstance(e, TtsChunkEnd)

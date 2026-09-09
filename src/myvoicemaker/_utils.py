@@ -4,7 +4,7 @@ import re
 import time
 from typing import Callable, TypeVar
 
-from ._errors import TimeoutError
+from ._errors import PollTimeoutError
 
 T = TypeVar("T")
 
@@ -109,6 +109,7 @@ def poll(
     is_done: Callable[[T], bool],
     interval_seconds: float = _DEFAULT_INTERVAL,
     timeout_seconds: float = _DEFAULT_TIMEOUT,
+    method: str | None = None,
 ) -> T:
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -116,5 +117,5 @@ def poll(
         if is_done(result):
             return result
         if time.monotonic() >= deadline:
-            raise TimeoutError(job_id, timeout_seconds)
+            raise PollTimeoutError(job_id, timeout_seconds, method)
         time.sleep(interval_seconds)

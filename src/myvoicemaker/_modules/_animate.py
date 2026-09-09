@@ -20,11 +20,11 @@ class AnimateModule(BaseModule):
             "audio_url": audio_url,
             "output_format": output_format,
         }
-        resp = self._http.post("/dev/v1/animate/generate", body)
+        resp = self._http.post("/dev/v1/animate/generate", body, method="animate.generate")
         return AnimateJobResponse.from_dict(resp.data)
 
     def get_result(self, job_id: str) -> AnimateResultResponse:
-        resp = self._http.get(f"/dev/v1/animate/{job_id}")
+        resp = self._http.get(f"/dev/v1/animate/{job_id}", None, method="animate.get_result")
         return AnimateResultResponse.from_dict(resp.data)
 
     def poll(
@@ -40,4 +40,5 @@ class AnimateModule(BaseModule):
             is_done=lambda r: r.status in _TERMINAL,
             interval_seconds=interval_seconds,
             timeout_seconds=timeout_seconds,
+            method="animate.poll",
         )

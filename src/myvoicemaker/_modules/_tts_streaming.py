@@ -15,6 +15,12 @@ from .._types._tts_stream import (
     TtsSessionEnd,
     TtsStreamError,
 )
+from .._errors import (
+    ConfigurationError,
+    NetworkError,
+    StreamClosedError,
+    create_api_error,
+)
 
 TtsStreamEvent = Union[
     TtsSessionBegin,
@@ -30,6 +36,56 @@ _KEEPALIVE_INTERVAL_S = 10.0
 # The server synthesizes all queued text before session.end — each pending
 # chunk needs a full GPU pass, so this is much longer than the ASR grace.
 _CLOSE_GRACE_S = 60.0
+
+
+def _open_websocket(url: str, credential: str, method: str):
+    """Connect, translating handshake failures into SDK errors.
+
+    The server answers a refused upgrade with the standard JSON error body
+    (401/402/403/422/429/503 ...) before any WebSocket frames flow, so the
+    exact ``errorCode`` is available here and maps to the same typed error a
+    REST call would raise.
+    """
+    try:
+        from websockets.sync.client import connect
+    except ImportError as exc:  # pragma: no cover - packaging guard
+        raise ConfigurationError("websocket_unavailable", method) from exc
+    try:
+        from websockets.exceptions import InvalidHandshake, InvalidStatus, InvalidURI
+    except ImportError:  # pragma: no cover - very old websockets
+        InvalidHandshake = InvalidStatus = InvalidURI = ()  # type: ignore[assignment]
+
+    try:
+        return connect(
+            url,
+            additional_headers={"Authorization": f"Bearer {credential}"},
+            max_size=None,
+        )
+    except InvalidStatus as exc:
+        response = getattr(exc, "response", None)
+        status = int(getattr(response, "status_code", 0) or 0)
+        headers = getattr(response, "headers", None)
+        raw = getattr(response, "body", b"") or b""
+        try:
+            body = json.loads(bytes(raw).decode("utf-8"))
+            if not isinstance(body, dict):
+                raise ValueError
+        except Exception:
+            reason = getattr(response, "reason_phrase", "") or ""
+            body = {
+                "error": f"HTTP {status}",
+                "detail": f"The server refused the WebSocket upgrade with {status} {reason}".rstrip()
+                + " and no JSON error body.",
+            }
+        raise create_api_error(
+            status,
+            body,
+            headers.get("Retry-After") if headers is not None else None,
+            method=method,
+            request_id=headers.get("X-Request-Id") if headers is not None else None,
+        ) from exc
+    except (InvalidURI, InvalidHandshake, OSError, TimeoutError) as exc:
+        raise NetworkError(method, exc) from exc
 
 
 class TtsStreamConnection:
@@ -71,28 +127,18 @@ class TtsStreamConnection:
         api_key: "str | None" = None,
         access_token: "str | None" = None,
         keepalive_interval: float = _KEEPALIVE_INTERVAL_S,
+        method: str = "tts.stream",
     ) -> None:
-        try:
-            from websockets.sync.client import connect
-        except ImportError as exc:  # pragma: no cover - packaging guard
-            raise RuntimeError(
-                "Streaming requires the 'websockets' package (pip install websockets)."
-            ) from exc
-
+        self._method = method
         # Ephemeral stream tokens (auth.create_stream_token) take precedence —
         # they travel through the same Authorization channel as the key.
         credential = access_token or api_key
         if not credential:
-            raise ValueError(
-                "Streaming requires an api_key or an access_token "
-                "(mint one server-side via auth.create_stream_token)."
-            )
+            raise ConfigurationError("credential_required", method)
 
-        self._ws = connect(
-            url,
-            additional_headers={"Authorization": f"Bearer {credential}"},
-            max_size=None,
-        )
+        self._ws = _open_websocket(url, credential, method)
+        #: Transport error that ended the reader thread, if any.
+        self.error: Optional[BaseException] = None
         self._events: "queue.Queue[Optional[TtsStreamEvent]]" = queue.Queue()
         self._callbacks: dict[str, list[Callable[[TtsStreamEvent], None]]] = {}
         self._session_begin: Optional[TtsSessionBegin] = None
@@ -124,8 +170,9 @@ class TtsStreamConnection:
                             index=self._current_chunk_index, data=bytes(raw)
                         )
                     )
-        except Exception:
-            pass
+        except Exception as exc:  # ConnectionClosedOK is the normal end
+            if exc.__class__.__name__ != "ConnectionClosedOK":
+                self.error = exc
         finally:
             self._closed.set()
             self._events.put(None)
@@ -245,7 +292,12 @@ class TtsStreamConnection:
         frame: dict[str, object] = {"type": "Text", "text": text}
         if id is not None:
             frame["id"] = id
-        self._ws.send(json.dumps(frame))
+        if self._closed.is_set():
+            raise StreamClosedError(f"{self._method}().send_text")
+        try:
+            self._ws.send(json.dumps(frame))
+        except Exception as exc:
+            raise StreamClosedError(f"{self._method}().send_text") from exc
 
     def finalize(self) -> None:
         """Flush the held-back sentence tail and synthesize everything

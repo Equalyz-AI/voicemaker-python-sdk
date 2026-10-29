@@ -624,12 +624,12 @@ Classes by HTTP status, refined by error code where developers need to branch:
 | :--- | :--- | :--- | :--- |
 | `AuthenticationError` | 401 | `missing_api_key`, `invalid_api_key`, `api_key_expired` | The key is missing, wrong, or expired |
 | ↳ `StreamTokenError` | 401/403 | `invalid_stream_token`, `stream_token_kind_mismatch` | Ephemeral stream token rejected — mint a fresh one with `auth.create_stream_token()` |
-| `ForbiddenError` (alias `PermissionError`, deprecated) | 403 | `api_key_revoked`, `project_disabled`, `api_access_not_enabled`, `insufficient_scope` | The key exists but may not make this call |
+| `ForbiddenError` (alias `PermissionError`, deprecated) | 403 | `api_key_revoked`, `project_disabled`, `account_suspended`, `api_access_not_enabled`, `insufficient_scope` | The key exists but may not make this call |
 | `InsufficientCreditsError` | 402 | `insufficient_credits` | Not enough purchased credits |
 | `NotFoundError` | 404 | `not_found`, `endpoint_not_found` | Unknown job id, or a wrong `base_url` |
 | `FileSizeLimitError` | 413 | `file_size_limit_exceeded`, `file_too_large` | Audio exceeds the plan / endpoint limit |
 | `UnsupportedMediaTypeError` | 415 | `unsupported_media`, `missing_audio_stream`, `unsupported_content_type`, … | Media format or content type not accepted |
-| `ValidationError` | 400/422 | `invalid_payload`, `invalid_query`, `voice_id_required`, `file_url_unreachable`, … | Bad request values — check `e.issues` |
+| `ValidationError` | 400/422 | `invalid_payload`, `invalid_query`, `voice_id_required`, `file_url_unreachable`, `file_url_host_not_allowed`, `invalid_webhook_url`, `audio_url_unreadable`, … | Bad request values — check `e.issues` |
 | ↳ `UnsupportedLanguageError` | 400 | `unsupported_language`, `streaming_unsupported_language` | Language not enabled / not streamable — see `tts.list_languages()` |
 | ↳ `UnknownVoiceError` | 422 | `unknown_voice_id` | Voice id matches nothing — see `tts.list_voices()` |
 | ↳ `VoiceNotReadyError` | 422 | `voice_not_ready` | Custom voice still processing or failed |

@@ -228,7 +228,7 @@ class InsufficientCreditsError(VoiceMakerAPIError):
 
 
 class ForbiddenError(VoiceMakerAPIError):
-    """403 — key revoked, project disabled, plan without API access, or missing scope."""
+    """403 — key revoked, project disabled, account suspended, plan without API access, or missing scope."""
 
     default_status = 403
 

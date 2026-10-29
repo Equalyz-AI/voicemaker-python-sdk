@@ -65,6 +65,13 @@ ERROR_CODES: Dict[str, ErrorCodeInfo] = {
         hint="Re-enable the project in the dashboard, or use a key from an active project.",
         retryable=False,
     ),
+    "account_suspended": ErrorCodeInfo(
+        status=403,
+        title="Forbidden",
+        description="The account that owns this API key is suspended, so all of its keys and stream tokens are refused.",
+        hint="Contact VoiceMaker support with the requestId to resolve the suspension; creating a new key will not help.",
+        retryable=False,
+    ),
     "api_access_not_enabled": ErrorCodeInfo(
         status=403,
         title="Forbidden",
@@ -219,6 +226,20 @@ ERROR_CODES: Dict[str, ErrorCodeInfo] = {
         hint="Use a public or pre-signed URL instead.",
         retryable=False,
     ),
+    "file_url_host_not_allowed": ErrorCodeInfo(
+        status=400,
+        title="Submission failed",
+        description="The media URL resolves to, or redirects to, a host the server will not fetch from (a private, loopback, link-local or otherwise non-public address).",
+        hint="Use a URL on the public internet for asr.transcribe() or animate.generate(), or upload the file with asr.transcribe_file().",
+        retryable=False,
+    ),
+    "invalid_webhook_url": ErrorCodeInfo(
+        status=400,
+        title="Invalid webhook URL",
+        description="webhook_url must be a public http or https URL; private, loopback and link-local addresses are refused.",
+        hint="Pass an endpoint reachable from the public internet as webhook_url, or leave it out and wait for the job with asr.poll().",
+        retryable=False,
+    ),
     "file_url_unreachable": ErrorCodeInfo(
         status=422,
         title="Submission failed",
@@ -302,6 +323,13 @@ ERROR_CODES: Dict[str, ErrorCodeInfo] = {
         description="The server could not process the submitted audio.",
         hint="Retry; if it persists, report it with the requestId.",
         retryable=True,
+    ),
+    "audio_url_unreadable": ErrorCodeInfo(
+        status=422,
+        title="Unreadable audio",
+        description="The audio_url passed to animate.generate() could not be downloaded, or its duration could not be read. The job is priced from that duration, so it is required.",
+        hint="Check that audio_url serves the raw audio file (mp3, wav, m4a) with a 2xx response from the public internet, then call animate.generate() again.",
+        retryable=False,
     ),
     "unknown_voice_id": ErrorCodeInfo(
         status=422,

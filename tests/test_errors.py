@@ -173,6 +173,23 @@ class TestCreateApiError:
         assert err.request_id == "hdr-1234-5678"
         assert create_api_error(401, body("missing_api_key", request_id="body-1"), request_id="hdr-1").request_id == "body-1"
 
+    @pytest.mark.parametrize(
+        "code,status,cls",
+        [
+            ("account_suspended", 403, ForbiddenError),
+            ("file_url_host_not_allowed", 400, ValidationError),
+            ("invalid_webhook_url", 400, ValidationError),
+            ("audio_url_unreadable", 422, ValidationError),
+        ],
+    )
+    def test_suspension_and_url_safety_codes(self, code, status, cls) -> None:
+        assert ERROR_CODES[code].status == status
+        err = create_api_error(status, body(code))
+        assert isinstance(err, cls)
+        assert err.code == code
+        assert err.hint == ERROR_CODES[code].hint
+        assert err.retryable is False
+
     def test_aliases(self) -> None:
         assert PermissionError is ForbiddenError
         assert TimeoutError is PollTimeoutError

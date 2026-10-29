@@ -45,6 +45,7 @@ TRANSLITERATE: list[tuple[str, str]] = [
     ("err.retryAfter", "e.retry_after"),
     ("err.issues", "e.issues"),
     ("nextCursor", "next_cursor"),
+    ("webhookUrl", "webhook_url"),
     ("chunkText()", "chunk_text()"),
     ("sendAudio()/sendText()", "send_audio()/send_text()"),
     ("sendText()", "send_text()"),
